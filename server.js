@@ -33,6 +33,16 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    /* ✅【关键】老师状态广播给 Display */
+    if (data.teacher && data.status) {
+      wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+          client.send(JSON.stringify(data));
+        }
+      });
+      return;
+    }
+
     let changed = false;
 
     /* ===== 新增 VIP（大小写不敏感） ===== */
@@ -80,3 +90,4 @@ wss.on("connection", (ws) => {
 server.listen(process.env.PORT || 3000, () => {
   console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
+
