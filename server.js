@@ -15,24 +15,33 @@ let vipHomework = [];
 let vipTuition = [];
 let currentStudent = ""; // 当前正在上的学生（只显示）
 
+// 存储签到的学生信息
+let signedInStudents = []; // 这个数组存储签到的学生姓名
+
 app.get("/", (req, res) => {
   res.send("✅ Moon Tuition Realtime Server is running");
 });
 
+// 处理 WebSocket 连接
 wss.on("connection", (ws) => {
   console.log("🔵 Client connected");
 
   // 🔁 新设备一连上来，先同步所有状态
-  ws.send(JSON.stringify({
-    type: "syncVIP",
-    homework: vipHomework,
-    tuition: vipTuition
-  }));
+  ws.send(
+    JSON.stringify({
+      type: "syncVIP",
+      homework: vipHomework,
+      tuition: vipTuition,
+    })
+  );
 
-  ws.send(JSON.stringify({
-    type: "syncCurrentStudent",
-    student: currentStudent
-  }));
+  // 发送当前签到的学生信息
+  ws.send(
+    JSON.stringify({
+      type: "syncSignedInStudents",
+      students: signedInStudents, // 把签到的学生列表发给新连接的客户端
+    })
+  );
 
   ws.on("message", (message) => {
     let data;
@@ -42,20 +51,46 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    /**
-     * =========================
-     * 1️⃣ 当前学生同步（最重要）
-     * =========================
-     */
+    // =========================
+    // 1️⃣ 当前学生同步（最重要）
+    // =========================
     if (data.type === "setCurrentStudent") {
       currentStudent = data.student || "";
 
-      wss.clients.forEach(client => {
+      wss.clients.forEach((client) => {
         if (client.readyState === 1) {
-          client.send(JSON.stringify({
-            type: "syncCurrentStudent",
-            student: currentStudent
-          }));
+          client.send(
+            JSON.stringify({
+              type: "syncCurrentStudent",
+              student: currentStudent,
+            })
+          );
+        }
+      });
+      return;
+    }
+
+    // =========================
+    // 2️⃣ 学生签到
+    // =========================
+    if (data.type === "studentSignedIn" && data.name) {
+      const studentName = data.name;
+
+      // 将签到的学生添加到签到列表中
+      if (!signedInStudents.includes(studentName)) {
+        signedInStudents.push(studentName);
+        console.log(`学生签到成功：${studentName}`);
+      }
+
+      // 广播给所有连接的客户端，更新签到的学生列表
+      wss.clients.forEach((client) => {
+        if (client.readyState === 1) {
+          client.send(
+            JSON.stringify({
+              type: "updateSignedInStudents",
+              students: signedInStudents, // 广播新的签到列表
+            })
+          );
         }
       });
       return;
@@ -63,11 +98,11 @@ wss.on("connection", (ws) => {
 
     /**
      * =========================
-     * 2️⃣ 状态广播（Available / Occupied / Done）
+     * 3️⃣ 状态广播（Available / Occupied / Done）
      * =========================
      */
     if (data.teacher && data.status) {
-      wss.clients.forEach(client => {
+      wss.clients.forEach((client) => {
         if (client.readyState === 1) {
           client.send(JSON.stringify(data));
         }
@@ -79,7 +114,7 @@ wss.on("connection", (ws) => {
 
     /**
      * =========================
-     * 3️⃣ 加入 VIP（功课 / 补习）
+     * 4️⃣ 加入 VIP（功课 / 补习）
      * =========================
      */
     if (data.type === "addVIP" && data.name && data.listType) {
@@ -87,7 +122,7 @@ wss.on("connection", (ws) => {
         data.listType === "homework" ? vipHomework : vipTuition;
 
       const exists = list.some(
-        v => v.toLowerCase() === data.name.toLowerCase()
+        (v) => v.toLowerCase() === data.name.toLowerCase()
       );
 
       if (!exists) {
@@ -99,17 +134,17 @@ wss.on("connection", (ws) => {
 
     /**
      * =========================
-     * 4️⃣ 删除 VIP（功课 / 补习）
+     * 5️⃣ 删除 VIP（功课 / 补习）
      * =========================
      */
     if (data.type === "removeVIP" && data.name && data.listType) {
       if (data.listType === "homework") {
         vipHomework = vipHomework.filter(
-          v => v.toLowerCase() !== data.name.toLowerCase()
+          (v) => v.toLowerCase() !== data.name.toLowerCase()
         );
       } else {
         vipTuition = vipTuition.filter(
-          v => v.toLowerCase() !== data.name.toLowerCase()
+          (v) => v.toLowerCase() !== data.name.toLowerCase()
         );
       }
       console.log(`➖ VIP removed (${data.listType}):`, data.name);
@@ -118,17 +153,19 @@ wss.on("connection", (ws) => {
 
     /**
      * =========================
-     * 5️⃣ 有变动才广播 VIP（避免乱跳）
+     * 6️⃣ 有变动才广播 VIP（避免乱跳）
      * =========================
      */
     if (changed) {
-      wss.clients.forEach(client => {
+      wss.clients.forEach((client) => {
         if (client.readyState === 1) {
-          client.send(JSON.stringify({
-            type: "syncVIP",
-            homework: vipHomework,
-            tuition: vipTuition
-          }));
+          client.send(
+            JSON.stringify({
+              type: "syncVIP",
+              homework: vipHomework,
+              tuition: vipTuition,
+            })
+          );
         }
       });
     }
@@ -139,6 +176,7 @@ wss.on("connection", (ws) => {
   });
 });
 
+// 启动服务器
 server.listen(process.env.PORT || 3000, () => {
   console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
