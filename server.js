@@ -7,44 +7,86 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 /**
- * =========================
- * 服务器端 WebSocket 功能
- * =========================
- */
+* ✅ 全局共享状态
+* 只有 VIP 是全局
+*/
+let vipStudents = [];
 
-// 处理 WebSocket 连接
+app.get("/", (req, res) => {
+res.send("✅ Moon Tuition Realtime Server is running");
+});
+
 wss.on("connection", (ws) => {
-  console.log("🔵 Client connected");
+console.log("🔵 Client connected");
 
-  // 新设备一连接，发送空的学生名单（不需要签到功能）
-  ws.send(
-    JSON.stringify({
-      type: "syncSignedInStudents",
-      students: [], // 初始时不发送任何学生数据
-    })
-  );
+// ✅ 新设备只同步 VIP（不包含 current student）
+ws.send(JSON.stringify({
+type: "syncVIP",
+vipStudents
+}));
 
-  // 监听收到的消息
-  ws.on("message", (message) => {
-    let data;
-    try {
-      data = JSON.parse(message);
-    } catch {
+ws.on("message", (message) => {
+let data;
+try {
+data = JSON.parse(message);
+} catch {
+return;
+}
+
+    /* ✅【关键】老师状态广播给 Display */
+    if (data.teacher && data.status) {
+      wss.clients.forEach(client => {
+        if (client.readyState === 1) {
+          client.send(JSON.stringify(data));
+        }
+      });
       return;
     }
 
-    // 如果有其他消息需要处理（暂时不需要学生签到功能）
-    // 你可以在这里添加额外的消息处理逻辑
+let changed = false;
 
-  });
+/* ===== 新增 VIP（大小写不敏感） ===== */
+if (data.type === "addVIP" && data.name) {
+const exists = vipStudents.some(
+v => v.toLowerCase() === data.name.toLowerCase()
+);
+if (!exists) {
+vipStudents.push(data.name);
+console.log("➕ VIP added:", data.name);
+changed = true;
+}
+}
 
-  // 客户端断开连接
-  ws.on("close", () => {
-    console.log("🔴 Client disconnected");
-  });
+/* ===== 删除 VIP ===== */
+if (data.type === "removeVIP" && data.name) {
+const before = vipStudents.length;
+vipStudents = vipStudents.filter(
+v => v.toLowerCase() !== data.name.toLowerCase()
+);
+if (vipStudents.length !== before) {
+console.log("➖ VIP removed:", data.name);
+changed = true;
+}
+}
+
+/* ===== 广播 VIP（只有有变化才广播） ===== */
+if (changed) {
+wss.clients.forEach(client => {
+if (client.readyState === 1) {
+client.send(JSON.stringify({
+type: "syncVIP",
+vipStudents
+}));
+}
+});
+}
 });
 
-// 启动服务器
+ws.on("close", () => {
+console.log("🔴 Client disconnected");
+});
+});
+
 server.listen(process.env.PORT || 3000, () => {
-  console.log("🚀 Server running on port", process.env.PORT || 3000);
+console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
