@@ -11,6 +11,7 @@ const wss = new WebSocketServer({ server });
 * 只有 VIP 是全局
 */
 let vipStudents = [];
+let currentStudents = [];
 
 app.get("/", (req, res) => {
 res.send("✅ Moon Tuition Realtime Server is running");
@@ -21,65 +22,85 @@ console.log("🔵 Client connected");
 
 // ✅ 新设备只同步 VIP（不包含 current student）
 ws.send(JSON.stringify({
-type: "syncVIP",
-vipStudents
+  type: "syncAll",
+  vipStudents,
+  currentStudents
 }));
 
 ws.on("message", (message) => {
-let data;
-try {
-data = JSON.parse(message);
-} catch {
-return;
-}
+  let data;
+  try {
+    data = JSON.parse(message);
+  } catch {
+    return;
+  }
 
-    /* ✅【关键】老师状态广播给 Display */
-    if (data.teacher && data.status) {
-      wss.clients.forEach(client => {
-        if (client.readyState === 1) {
-          client.send(JSON.stringify(data));
-        }
-      });
-      return;
+  /* ✅ 老师状态广播 */
+  if (data.teacher && data.status) {
+    wss.clients.forEach(client => {
+      if (client.readyState === 1) {
+        client.send(JSON.stringify(data));
+      }
+    });
+    return;
+  }
+
+  let changed = false;
+
+  /* ===== VIP ===== */
+  if (data.type === "addVIP" && data.name) {
+    const exists = vipStudents.some(
+      v => v.toLowerCase() === data.name.toLowerCase()
+    );
+    if (!exists) {
+      vipStudents.push(data.name);
+      changed = true;
     }
+  }
 
-let changed = false;
+  if (data.type === "removeVIP" && data.name) {
+    const before = vipStudents.length;
+    vipStudents = vipStudents.filter(
+      v => v.toLowerCase() !== data.name.toLowerCase()
+    );
+    if (vipStudents.length !== before) {
+      changed = true;
+    }
+  }
 
-/* ===== 新增 VIP（大小写不敏感） ===== */
-if (data.type === "addVIP" && data.name) {
-const exists = vipStudents.some(
-v => v.toLowerCase() === data.name.toLowerCase()
-);
-if (!exists) {
-vipStudents.push(data.name);
-console.log("➕ VIP added:", data.name);
-changed = true;
-}
-}
+  /* ===== Current Students ===== */
+  if (data.type === "addCurrent" && data.name) {
+    const exists = currentStudents.some(
+      n => n.toLowerCase() === data.name.toLowerCase()
+    );
+    if (!exists) {
+      currentStudents.push(data.name);
+      changed = true;
+    }
+  }
 
-/* ===== 删除 VIP ===== */
-if (data.type === "removeVIP" && data.name) {
-const before = vipStudents.length;
-vipStudents = vipStudents.filter(
-v => v.toLowerCase() !== data.name.toLowerCase()
-);
-if (vipStudents.length !== before) {
-console.log("➖ VIP removed:", data.name);
-changed = true;
-}
-}
+  if (data.type === "removeCurrent" && data.name) {
+    const before = currentStudents.length;
+    currentStudents = currentStudents.filter(
+      n => n.toLowerCase() !== data.name.toLowerCase()
+    );
+    if (currentStudents.length !== before) {
+      changed = true;
+    }
+  }
 
-/* ===== 广播 VIP（只有有变化才广播） ===== */
-if (changed) {
-wss.clients.forEach(client => {
-if (client.readyState === 1) {
-client.send(JSON.stringify({
-type: "syncVIP",
-vipStudents
-}));
-}
-});
-}
+  /* ===== 广播（统一 syncAll） ===== */
+  if (changed) {
+    wss.clients.forEach(client => {
+      if (client.readyState === 1) {
+        client.send(JSON.stringify({
+          type: "syncAll",
+          vipStudents,
+          currentStudents
+        }));
+      }
+    });
+  }
 });
 
 ws.on("close", () => {
