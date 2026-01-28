@@ -89,6 +89,20 @@ ws.on("message", (message) => {
     }
   }
 
+/* ✅👇👇👇 就在这里贴这段 👇👇👇 */
+
+/* ===== Current Student（单一） ===== */
+if (data.type === "setCurrentStudent") {
+  if (data.student && data.student.trim() !== "") {
+    // 只允许 1 个当前学生
+    currentStudents = [data.student.trim()];
+  } else {
+    // 清空当前学生
+    currentStudents = [];
+  }
+  changed = true;
+}
+
   /* ===== 广播（统一 syncAll） ===== */
   if (changed) {
     wss.clients.forEach(client => {
@@ -111,3 +125,4 @@ console.log("🔴 Client disconnected");
 server.listen(process.env.PORT || 3000, () => {
 console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
+
