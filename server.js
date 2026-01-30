@@ -12,7 +12,9 @@ const wss = new WebSocketServer({ server });
 */
 let vipStudents = [];
 let currentStudents = [];
-let occupiedStudents = {}; // 🔥 新增：学生 → 老师
+
+// 🔒 新增：学生 → 老师（独占表）
+let occupiedStudents = {};
 
 app.get("/", (req, res) => {
 res.send("✅ Moon Tuition Realtime Server is running");
@@ -155,5 +157,3 @@ console.log("🔴 Client disconnected");
 server.listen(process.env.PORT || 3000, () => {
 console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
-
-
