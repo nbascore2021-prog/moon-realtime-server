@@ -103,6 +103,27 @@ if (data.type === "setCurrentStudent") {
   changed = true;
 }
 
+/* ===== Student Done（统一回收） ===== */
+if (data.type === "studentDone" && data.name) {
+  const name = data.name.trim();
+  if (!name) return;
+
+  // 1️⃣ 从 currentStudents 移除
+  currentStudents = currentStudents.filter(
+    n => n.toLowerCase() !== name.toLowerCase()
+  );
+
+  // 2️⃣ 加回 VIP（末端，避免重复）
+  const exists = vipStudents.some(
+    v => v.toLowerCase() === name.toLowerCase()
+  );
+  if (!exists) {
+    vipStudents.push(name);
+  }
+
+  changed = true;
+}
+
   /* ===== 广播（统一 syncAll） ===== */
   if (changed) {
     wss.clients.forEach(client => {
