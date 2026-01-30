@@ -12,6 +12,7 @@ const wss = new WebSocketServer({ server });
 */
 let vipStudents = [];
 let currentStudents = [];
+let occupiedStudents = {}; // 🔥 新增：学生 → 老师
 
 app.get("/", (req, res) => {
 res.send("✅ Moon Tuition Realtime Server is running");
@@ -24,7 +25,8 @@ console.log("🔵 Client connected");
 ws.send(JSON.stringify({
   type: "syncAll",
   vipStudents,
-  currentStudents
+  currentStudents,
+  occupiedStudents
 }));
 
 ws.on("message", (message) => {
@@ -103,15 +105,43 @@ if (data.type === "setCurrentStudent") {
   changed = true;
 }
 
+/* ===== Claim Student（锁定学生） ===== */
+if (data.type === "claimStudent" && data.student && data.teacher) {
+  // 如果学生已被其他老师占用，拒绝
+  if (
+    occupiedStudents[data.student] &&
+    occupiedStudents[data.student] !== data.teacher
+  ) {
+    ws.send(JSON.stringify({
+      type: "claimRejected",
+      student: data.student
+    }));
+    return;
+  }
+
+  // 记录这个学生被该老师占用
+  occupiedStudents[data.student] = data.teacher;
+  changed = true;
+}
+
+/* ===== Release Student（Done 后释放） ===== */
+if (data.type === "releaseStudent" && data.student && data.teacher) {
+  if (occupiedStudents[data.student] === data.teacher) {
+    delete occupiedStudents[data.student];
+    changed = true;
+  }
+}
+
   /* ===== 广播（统一 syncAll） ===== */
   if (changed) {
     wss.clients.forEach(client => {
       if (client.readyState === 1) {
         client.send(JSON.stringify({
-          type: "syncAll",
-          vipStudents,
-          currentStudents
-        }));
+  type: "syncAll",
+  vipStudents,
+  currentStudents,
+  occupiedStudents
+}));
       }
     });
   }
@@ -125,4 +155,5 @@ console.log("🔴 Client disconnected");
 server.listen(process.env.PORT || 3000, () => {
 console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
+
 
