@@ -11,6 +11,7 @@ const wss = new WebSocketServer({ server });
 * 只有 VIP 是全局
 */
 let vipStudents = [];
+let currentStudents = [];
 
 app.get("/", (req, res) => {
 res.send("✅ Moon Tuition Realtime Server is running");
@@ -23,6 +24,7 @@ console.log("🔵 Client connected");
 ws.send(JSON.stringify({
   type: "syncAll",
   vipStudents,
+  currentStudents
 }));
 
 ws.on("message", (message) => {
@@ -45,31 +47,8 @@ ws.on("message", (message) => {
 
   let changed = false;
 
-/* ===== VIP 顺序（方案二核心） ===== */
-if (data.type === "moveVIPToEnd" && data.name) {
-  const name = data.name.trim();
-
-  vipStudents = vipStudents.filter(
-    v => v.toLowerCase() !== name.toLowerCase()
-  );
-  vipStudents.push(name);
-
-  const payload = JSON.stringify({
-    type: "syncVIPOrder",
-    vipStudents
-  });
-
-  wss.clients.forEach(client => {
-    if (client.readyState === 1) {
-      client.send(payload);
-    }
-  });
-
-  return; // ✅ 阻断 syncAll
-}
-
-/* ===== VIP 增删 ===== */
-if (data.type === "addVIP" && data.name) {
+  /* ===== VIP ===== */
+  if (data.type === "addVIP" && data.name) {
     const exists = vipStudents.some(
       v => v.toLowerCase() === data.name.toLowerCase()
     );
@@ -89,6 +68,41 @@ if (data.type === "addVIP" && data.name) {
     }
   }
 
+  /* ===== Current Students ===== */
+  if (data.type === "addCurrent" && data.name) {
+    const exists = currentStudents.some(
+      n => n.toLowerCase() === data.name.toLowerCase()
+    );
+    if (!exists) {
+      currentStudents.push(data.name);
+      changed = true;
+    }
+  }
+
+  if (data.type === "removeCurrent" && data.name) {
+    const before = currentStudents.length;
+    currentStudents = currentStudents.filter(
+      n => n.toLowerCase() !== data.name.toLowerCase()
+    );
+    if (currentStudents.length !== before) {
+      changed = true;
+    }
+  }
+
+/* ✅👇👇👇 就在这里贴这段 👇👇👇 */
+
+/* ===== Current Student（单一） ===== */
+if (data.type === "setCurrentStudent") {
+  if (data.student && data.student.trim() !== "") {
+    // 只允许 1 个当前学生
+    currentStudents = [data.student.trim()];
+  } else {
+    // 清空当前学生
+    currentStudents = [];
+  }
+  changed = true;
+}
+
   /* ===== 广播（统一 syncAll） ===== */
   if (changed) {
     wss.clients.forEach(client => {
@@ -96,6 +110,7 @@ if (data.type === "addVIP" && data.name) {
         client.send(JSON.stringify({
           type: "syncAll",
           vipStudents,
+          currentStudents
         }));
       }
     });
@@ -110,3 +125,4 @@ console.log("🔴 Client disconnected");
 server.listen(process.env.PORT || 3000, () => {
 console.log("🚀 Server running on port", process.env.PORT || 3000);
 });
+
